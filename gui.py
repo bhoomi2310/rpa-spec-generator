@@ -68,7 +68,7 @@ class RPASpecGeneratorApp:
         container.pack(fill=tk.BOTH, expand=True)
 
         # ── Title ──
-        title = tk.Label(
+        self.title_label = tk.Label(
             container,
             text="⚙  RPA Workflow Spec Generator",
             font=self.FONT_TITLE,
@@ -76,7 +76,7 @@ class RPASpecGeneratorApp:
             bg=self.BG,
             anchor="w",
         )
-        title.pack(fill=tk.X, pady=(0, 14))
+        self.title_label.pack(fill=tk.X, pady=(0, 14))
 
         # ── Notebook Tab Bar ──
         self.notebook = ttk.Notebook(container)
@@ -89,9 +89,23 @@ class RPASpecGeneratorApp:
         self.notebook.add(self.tab_spec, text="Spec Generator")
         self.notebook.add(self.tab_run, text="Run Automation")
 
+        # Bind tab changes to dynamically update heading
+        self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
         # Build individual tabs
         self._build_tab_spec()
         self._build_tab_run()
+
+    def _on_tab_changed(self, event) -> None:
+        """Updates main window title based on the selected tab index."""
+        try:
+            selected_tab = self.notebook.index(self.notebook.select())
+            if selected_tab == 0:
+                self.title_label.configure(text="⚙  RPA Workflow Spec Generator")
+            else:
+                self.title_label.configure(text="⚙  RPA Workflow Simulator")
+        except Exception:
+            pass
 
     # ------------------------------------------------------------------ #
     #  TAB 1: Spec Generator (Existing Functionality)                   #
@@ -455,15 +469,45 @@ class RPASpecGeneratorApp:
         main_split = tk.Frame(self.run_container, bg=self.BG)
         main_split.pack(fill=tk.BOTH, expand=True)
 
-        left_col = tk.Frame(main_split, bg=self.BG)
-        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 15))
+        # Left Column Scrollable Container
+        left_outer = tk.Frame(main_split, bg=self.BG)
+        left_outer.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 15))
 
+        canvas = tk.Canvas(left_outer, bg=self.BG, highlightthickness=0)
+        scrollbar = tk.Scrollbar(left_outer, orient="vertical", command=canvas.yview)
+        left_col = tk.Frame(canvas, bg=self.BG)
+
+        # Bind configuration for scroll region
+        left_col.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas_window = canvas.create_window((0, 0), window=left_col, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Force left_col frame to match canvas width on resize
+        def _configure_canvas(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+        canvas.bind("<Configure>", _configure_canvas)
+
+        # Mousewheel scroll support
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind("<Enter>", lambda _: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda _: canvas.unbind_all("<MouseWheel>"))
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Right Column
         right_col = tk.Frame(main_split, bg=self.BG)
         right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(15, 0))
 
         # Left Column: SECTION B - Automation Found Card
-        card = tk.Frame(left_col, bg=self.SURFACE, bd=1, relief=tk.SOLID, padx=15, pady=15)
-        card.pack(fill=tk.X, pady=(0, 15))
+        card = tk.Frame(left_col, bg=self.SURFACE, bd=1, relief=tk.SOLID, padx=15, pady=12)
+        card.pack(fill=tk.X, pady=(0, 10))
 
         lbl_name = tk.Label(
             card,
@@ -473,7 +517,7 @@ class RPASpecGeneratorApp:
             bg=self.SURFACE,
             anchor="w",
         )
-        lbl_name.pack(fill=tk.X, pady=(0, 5))
+        lbl_name.pack(fill=tk.X, pady=(0, 3))
 
         lbl_desc = tk.Label(
             card,
@@ -485,7 +529,7 @@ class RPASpecGeneratorApp:
             justify=tk.LEFT,
             anchor="w",
         )
-        lbl_desc.pack(fill=tk.X, pady=(0, 10))
+        lbl_desc.pack(fill=tk.X, pady=(0, 8))
 
         lbl_outputs_title = tk.Label(
             card,
@@ -495,13 +539,13 @@ class RPASpecGeneratorApp:
             bg=self.SURFACE,
             anchor="w",
         )
-        lbl_outputs_title.pack(fill=tk.X, pady=(0, 5))
+        lbl_outputs_title.pack(fill=tk.X, pady=(0, 3))
 
         for out in automation.get("expected_outputs", []):
             lbl_out = tk.Label(
                 card,
                 text=f"  • {out}",
-                font=("Segoe UI", 10),
+                font=("Segoe UI", 9),
                 fg=self.TEXT_DIM,
                 bg=self.SURFACE,
                 anchor="w",
@@ -510,9 +554,9 @@ class RPASpecGeneratorApp:
             )
             lbl_out.pack(fill=tk.X)
 
-        # Left Column: SECTION C - Dynamic Input Form
+        # Left Column: SECTION C - Dynamic Input Form (Grid Layout)
         form_frame = tk.Frame(left_col, bg=self.BG)
-        form_frame.pack(fill=tk.BOTH, expand=True)
+        form_frame.pack(fill=tk.X, pady=(0, 10))
 
         lbl_inputs_title = tk.Label(
             form_frame,
@@ -522,28 +566,43 @@ class RPASpecGeneratorApp:
             bg=self.BG,
             anchor="w",
         )
-        lbl_inputs_title.pack(fill=tk.X, pady=(0, 8))
+        lbl_inputs_title.pack(fill=tk.X, pady=(0, 6))
+
+        grid_frame = tk.Frame(form_frame, bg=self.BG)
+        grid_frame.pack(fill=tk.X, pady=(0, 10))
+        grid_frame.columnconfigure(0, weight=1, uniform="group1")
+        grid_frame.columnconfigure(1, weight=1, uniform="group1")
 
         self.run_inputs = {}
 
-        for inp in automation.get("required_inputs", []):
+        for idx, inp in enumerate(automation.get("required_inputs", [])):
             field_name = inp["field"]
             field_label = inp["label"]
             field_type = inp["type"]
             placeholder = inp.get("placeholder", "")
 
-            field_container = tk.Frame(form_frame, bg=self.BG, pady=4)
-            field_container.pack(fill=tk.X)
+            row = idx // 2
+            col = idx % 2
+
+            field_container = tk.Frame(grid_frame, bg=self.BG, pady=4, padx=5)
+            
+            # Span 2 columns if last item and total count is odd
+            is_last = (idx == len(automation.get("required_inputs", [])) - 1)
+            is_odd = (len(automation.get("required_inputs", [])) % 2 == 1)
+            if is_last and is_odd:
+                field_container.grid(row=row, column=0, columnspan=2, sticky="ew")
+            else:
+                field_container.grid(row=row, column=col, sticky="ew")
 
             lbl_f = tk.Label(
                 field_container,
                 text=field_label,
-                font=("Segoe UI", 10, "bold"),
+                font=("Segoe UI", 9, "bold"),
                 fg=self.TEXT_DIM,
                 bg=self.BG,
                 anchor="w",
             )
-            lbl_f.pack(fill=tk.X, pady=(0, 3))
+            lbl_f.pack(fill=tk.X, pady=(0, 2))
 
             if field_type == "dropdown":
                 options = inp.get("options", [])
@@ -570,7 +629,7 @@ class RPASpecGeneratorApp:
                     activeforeground="#ffffff",
                     font=self.FONT_MAIN,
                 )
-                opt_menu.pack(fill=tk.X, ipady=4)
+                opt_menu.pack(fill=tk.X, ipady=2)
             else:
                 entry_frame = tk.Frame(field_container, bg=self.BORDER, bd=1, relief=tk.SOLID)
                 entry_frame.pack(fill=tk.X)
@@ -589,7 +648,6 @@ class RPASpecGeneratorApp:
 
                 self.run_inputs[field_name] = (entry, placeholder)
 
-                # Configure dynamic placeholder handlers
                 def make_placeholder_handlers(e, p):
                     def on_focus_in(event):
                         if e.get() == p:
@@ -603,9 +661,9 @@ class RPASpecGeneratorApp:
                     e.bind("<FocusOut>", on_focus_out)
 
                 make_placeholder_handlers(entry, placeholder)
-                entry.pack(fill=tk.X, ipady=6, padx=8)
+                entry.pack(fill=tk.X, ipady=4, padx=6)
 
-        # Run button
+        # Run button aligned below the grid fields
         submit_btn = tk.Button(
             form_frame,
             text="⚙  Run Automation",
@@ -620,7 +678,7 @@ class RPASpecGeneratorApp:
             pady=8,
             command=lambda: self._on_run_simulation(detected_id),
         )
-        submit_btn.pack(anchor="w", pady=(15, 0))
+        submit_btn.pack(anchor="w", pady=(10, 0))
         submit_btn.bind("<Enter>", lambda e: submit_btn.configure(bg=self.ACCENT_HOVER))
         submit_btn.bind("<Leave>", lambda e: submit_btn.configure(bg=self.ACCENT))
 
