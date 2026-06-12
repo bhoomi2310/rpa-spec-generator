@@ -1,0 +1,390 @@
+[
+  {
+    "id": "employee_onboarding",
+    "name": "Employee Onboarding",
+    "description": "Onboard a new employee by provisioning accounts, departments, and sending orientation documents.",
+    "keywords": ["onboard", "new hire", "employee onboarding", "welcome new employee", "joining"],
+    "required_inputs": [
+      {
+        "field": "full_name",
+        "label": "Full Name",
+        "type": "text",
+        "placeholder": "John Doe"
+      },
+      {
+        "field": "email",
+        "label": "Email Address",
+        "type": "email",
+        "placeholder": "john.doe@company.com"
+      },
+      {
+        "field": "department",
+        "label": "Department",
+        "type": "dropdown",
+        "options": ["HR", "IT", "Finance", "Operations"],
+        "placeholder": "Select Department"
+      },
+      {
+        "field": "joining_date",
+        "label": "Joining Date",
+        "type": "date",
+        "placeholder": "YYYY-MM-DD"
+      },
+      {
+        "field": "employee_id",
+        "label": "Employee ID",
+        "type": "text",
+        "placeholder": "EMP-1001"
+      }
+    ],
+    "expected_outputs": [
+      "Active Directory Account provisioned",
+      "Welcome onboarding email sent to new hire",
+      "Orientation schedule calendar invite generated"
+    ]
+  },
+  {
+    "id": "hr_training_invitation",
+    "name": "HR Training Invitation",
+    "description": "Send bulk training invite notifications and registration details to designated employees.",
+    "keywords": ["training", "invite", "training invite", "session registration", "class invitation"],
+    "required_inputs": [
+      {
+        "field": "recipient_emails",
+        "label": "Recipient Email List",
+        "type": "text",
+        "placeholder": "employee1@company.com, employee2@company.com"
+      },
+      {
+        "field": "training_title",
+        "label": "Training Title",
+        "type": "text",
+        "placeholder": "Security Awareness Training"
+      },
+      {
+        "field": "training_date",
+        "label": "Training Date",
+        "type": "date",
+        "placeholder": "YYYY-MM-DD"
+      },
+      {
+        "field": "training_time",
+        "label": "Training Time",
+        "type": "text",
+        "placeholder": "10:00 AM EST"
+      },
+      {
+        "field": "location_or_link",
+        "label": "Location or Meeting Link",
+        "type": "text",
+        "placeholder": "https://meet.google.com/abc-xyz"
+      }
+    ],
+    "expected_outputs": [
+      "Bulk email invitations sent to all recipients",
+      "Calendar invites sent and synced",
+      "Training attendance tracking log initialized"
+    ]
+  },
+  {
+    "id": "leave_approval_notification",
+    "name": "Leave Approval Notification",
+    "description": "Notify employee of their leave request status approval and update payroll logs.",
+    "keywords": ["leave approval", "leave", "approve leave", "time off approval", "vacation approval"],
+    "required_inputs": [
+      {
+        "field": "employee_email",
+        "label": "Employee Email",
+        "type": "email",
+        "placeholder": "employee@company.com"
+      },
+      {
+        "field": "employee_name",
+        "label": "Employee Name",
+        "type": "text",
+        "placeholder": "Jane Smith"
+      },
+      {
+        "field": "leave_start_date",
+        "label": "Leave Start Date",
+        "type": "date",
+        "placeholder": "YYYY-MM-DD"
+      },
+      {
+        "field": "leave_end_date",
+        "label": "Leave End Date",
+        "type": "date",
+        "placeholder": "YYYY-MM-DD"
+      },
+      {
+        "field": "approved_by",
+        "label": "Approved By (Manager Name)",
+        "type": "text",
+        "placeholder": "Manager Name"
+      }
+    ],
+    "expected_outputs": [
+      "Leave approval notification email sent to employee",
+      "HR Leave tracker DB updated with status 'Approved'",
+      "Slack/Teams notification sent to department channel"
+    ]
+  },
+  {
+    "id": "invoice_processing",
+    "name": "Invoice Processing",
+    "description": "Extract invoice fields, validate invoice details and log under the correct department.",
+    "keywords": ["invoice", "bill", "vendor payment", "process invoice", "invoice data extraction"],
+    "required_inputs": [
+      {
+        "field": "vendor_name",
+        "label": "Vendor Name",
+        "type": "text",
+        "placeholder": "Vendor Corp"
+      },
+      {
+        "field": "invoice_number",
+        "label": "Invoice Number",
+        "type": "text",
+        "placeholder": "INV-2026-99"
+      },
+      {
+        "field": "amount",
+        "label": "Amount ($)",
+        "type": "number",
+        "placeholder": "1500.00"
+      },
+      {
+        "field": "due_date",
+        "label": "Due Date",
+        "type": "date",
+        "placeholder": "YYYY-MM-DD"
+      },
+      {
+        "field": "department",
+        "label": "Associated Department",
+        "type": "dropdown",
+        "options": ["HR", "IT", "Finance", "Operations"],
+        "placeholder": "Select Department"
+      }
+    ],
+    "expected_outputs": [
+      "Invoice registered in ERP ledger",
+      "Payment voucher generated for Finance",
+      "Confirmation slip emailed to vendor"
+    ]
+  },
+  {
+    "id": "new_user_account_creation",
+    "name": "New User Account Creation",
+    "description": "Create identity accounts inside company portals and assign access controls.",
+    "keywords": ["create user", "account creation", "new account", "system user", "provision user"],
+    "required_inputs": [
+      {
+        "field": "full_name",
+        "label": "Full Name",
+        "type": "text",
+        "placeholder": "Bob Jones"
+      },
+      {
+        "field": "email",
+        "label": "Email Address",
+        "type": "email",
+        "placeholder": "bob.jones@company.com"
+      },
+      {
+        "field": "role",
+        "label": "Role",
+        "type": "dropdown",
+        "options": ["Admin", "Manager", "Employee", "Intern"],
+        "placeholder": "Select Role"
+      },
+      {
+        "field": "department",
+        "label": "Department",
+        "type": "dropdown",
+        "options": ["HR", "IT", "Finance", "Operations"],
+        "placeholder": "Select Department"
+      }
+    ],
+    "expected_outputs": [
+      "User profile created in identity database",
+      "Security groups and permission roles assigned",
+      "Temporary credentials securely transmitted to employee"
+    ]
+  },
+  {
+    "id": "offboarding_workflow",
+    "name": "Offboarding Workflow",
+    "description": "Decommission credentials, calculate last working day accounts and transition offboarding records.",
+    "keywords": ["offboard", "leaving employee", "terminate employee", "exit checklist", "decommission account"],
+    "required_inputs": [
+      {
+        "field": "employee_name",
+        "label": "Employee Name",
+        "type": "text",
+        "placeholder": "Alice Cooper"
+      },
+      {
+        "field": "employee_email",
+        "label": "Employee Email",
+        "type": "email",
+        "placeholder": "alice.cooper@company.com"
+      },
+      {
+        "field": "last_working_date",
+        "label": "Last Working Date",
+        "type": "date",
+        "placeholder": "YYYY-MM-DD"
+      },
+      {
+        "field": "manager_email",
+        "label": "Manager Email Address",
+        "type": "email",
+        "placeholder": "manager@company.com"
+      }
+    ],
+    "expected_outputs": [
+      "Account access termination scheduled",
+      "Asset recovery ticket generated in IT Service Desk",
+      "Offboarding exit survey link sent to employee"
+    ]
+  },
+  {
+    "id": "payslip_distribution",
+    "name": "Payslip Distribution",
+    "description": "Send monthly payslips securely to employee emails grouped by department.",
+    "keywords": ["payslip", "pay stub", "salary slip", "monthly payslip", "distribute payslips"],
+    "required_inputs": [
+      {
+        "field": "month",
+        "label": "Target Month",
+        "type": "dropdown",
+        "options": [
+          "January", "February", "March", "April", "May", "June",
+          "July", "August", "September", "October", "November", "December"
+        ],
+        "placeholder": "Select Month"
+      },
+      {
+        "field": "year",
+        "label": "Target Year",
+        "type": "number",
+        "placeholder": "2026"
+      },
+      {
+        "field": "department",
+        "label": "Department Group",
+        "type": "dropdown",
+        "options": ["All", "HR", "IT", "Finance", "Operations"],
+        "placeholder": "Select Department"
+      }
+    ],
+    "expected_outputs": [
+      "Encrypted PDF payslips generated from payroll database",
+      "Individual emails sent to employees with password protection",
+      "Delivery status audit log archived"
+    ]
+  },
+  {
+    "id": "compliance_report_generation",
+    "name": "Compliance Report Generation",
+    "description": "Compile audit and regulatory compliance records and email reports.",
+    "keywords": ["compliance", "compliance report", "audit report", "generate compliance", "regulatory report"],
+    "required_inputs": [
+      {
+        "field": "report_type",
+        "label": "Report Frequency",
+        "type": "dropdown",
+        "options": ["Monthly", "Quarterly", "Annual"],
+        "placeholder": "Select Frequency"
+      },
+      {
+        "field": "period",
+        "label": "Reporting Period Details",
+        "type": "text",
+        "placeholder": "Q2-2026"
+      },
+      {
+        "field": "recipient_email",
+        "label": "Recipient Audit Email",
+        "type": "email",
+        "placeholder": "compliance-officer@company.com"
+      }
+    ],
+    "expected_outputs": [
+      "Aggregate compliance metric calculations completed",
+      "PDF compliance report generated with digital signature",
+      "Emailed report to compliance officer and stored in security vault"
+    ]
+  },
+  {
+    "id": "asset_assignment",
+    "name": "Asset Assignment",
+    "description": "Assign IT assets and hardware inventories to employees with automated ticketing.",
+    "keywords": ["assign asset", "hardware assignment", "laptop assignment", "asset allocation", "assign laptop"],
+    "required_inputs": [
+      {
+        "field": "employee_name",
+        "label": "Employee Name",
+        "type": "text",
+        "placeholder": "Steve Rogers"
+      },
+      {
+        "field": "employee_email",
+        "label": "Employee Email",
+        "type": "email",
+        "placeholder": "steve.rogers@company.com"
+      },
+      {
+        "field": "asset_type",
+        "label": "IT Asset Type",
+        "type": "dropdown",
+        "options": ["Laptop", "Phone", "Access Card", "All"],
+        "placeholder": "Select Asset Type"
+      },
+      {
+        "field": "asset_id",
+        "label": "IT Asset ID",
+        "type": "text",
+        "placeholder": "AST-PHONE-77"
+      }
+    ],
+    "expected_outputs": [
+      "Inventory database updated with employee ownership assignment",
+      "Asset custody policy signature request dispatched via DocuSign",
+      "Log confirmation emailed to IT support desk"
+    ]
+  },
+  {
+    "id": "password_reset_notification",
+    "name": "Password Reset Notification",
+    "description": "Dispatches system reset notifications and logs requests.",
+    "keywords": ["password reset", "reset password", "forgot password", "reset system password", "password instructions"],
+    "required_inputs": [
+      {
+        "field": "employee_email",
+        "label": "Employee Email",
+        "type": "email",
+        "placeholder": "employee@company.com"
+      },
+      {
+        "field": "employee_name",
+        "label": "Employee Name",
+        "type": "text",
+        "placeholder": "Bruce Wayne"
+      },
+      {
+        "field": "system_name",
+        "label": "Target System Name",
+        "type": "dropdown",
+        "options": ["SAP", "Workday", "Email", "VPN"],
+        "placeholder": "Select System"
+      }
+    ],
+    "expected_outputs": [
+      "Password reset token generated",
+      "Secure reset instructions email dispatched to employee",
+      "Security audit trail record logged in AD directory logs"
+    ]
+  }
+]
