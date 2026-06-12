@@ -29,12 +29,6 @@
         "label": "Joining Date",
         "type": "date",
         "placeholder": "YYYY-MM-DD"
-      },
-      {
-        "field": "employee_id",
-        "label": "Employee ID",
-        "type": "text",
-        "placeholder": "EMP-1001"
       }
     ],
     "expected_outputs": [

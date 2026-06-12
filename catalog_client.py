@@ -125,7 +125,8 @@ def simulate_execution(automation_id: str, input_values: dict) -> str:
         email = get_val("email", "jane.doe@company.com")
         dept = get_val("department", "IT")
         join_date = get_val("joining_date", now_str.split(" ")[0])
-        emp_id = get_val("employee_id", "EMP-9999")
+        # Generate a dynamic Employee ID during execution
+        emp_id = f"EMP-2026-{datetime.now().strftime('%M%S')}"
 
         steps = [
             f"Verifying employee ID '{emp_id}' validation and department checks.",
