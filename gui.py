@@ -92,9 +92,11 @@ class RPASpecGeneratorApp:
         # Tab Frames
         self.tab_spec = tk.Frame(self.notebook, bg=self.BG)
         self.tab_run = tk.Frame(self.notebook, bg=self.BG)
+        self.tab_log = tk.Frame(self.notebook, bg=self.BG)
 
         self.notebook.add(self.tab_spec, text="Spec Generator")
         self.notebook.add(self.tab_run, text="Run Automation")
+        self.notebook.add(self.tab_log, text="Error Log")
 
         # Bind tab changes to dynamically update heading
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
@@ -102,6 +104,7 @@ class RPASpecGeneratorApp:
         # Build individual tabs
         self._build_tab_spec()
         self._build_tab_run()
+        self._build_tab_log()
 
     def _on_tab_changed(self, event) -> None:
         """Updates main window title based on the selected tab index."""
@@ -109,8 +112,10 @@ class RPASpecGeneratorApp:
             selected_tab = self.notebook.index(self.notebook.select())
             if selected_tab == 0:
                 self.title_label.configure(text="⚙  RPA Workflow Spec Generator")
-            else:
+            elif selected_tab == 1:
                 self.title_label.configure(text="⚙  RPA Workflow Simulator")
+            else:
+                self.title_label.configure(text="⚙  System Error Log")
         except Exception:
             pass
 
@@ -692,6 +697,35 @@ class RPASpecGeneratorApp:
         )
         lbl_desc.pack(fill=tk.X, pady=(0, 8))
 
+        # Agentic AI Badge & Tooltip
+        agentic_type = workflow.get("agentic_type")
+        if agentic_type:
+            badge_frame = tk.Frame(card, bg=self.SURFACE)
+            badge_frame.pack(fill=tk.X, pady=(0, 8))
+            
+            lbl_badge = tk.Label(
+                badge_frame,
+                text=f"⚡ Agentic AI — {agentic_type}",
+                font=("Segoe UI", 9, "bold"),
+                fg="#ffffff",
+                bg="#6d28d9",
+                padx=6,
+                pady=2,
+                anchor="w"
+            )
+            lbl_badge.pack(anchor="w")
+            
+            lbl_tooltip = tk.Label(
+                badge_frame,
+                text=f"This workflow uses AutomationEdge's Agentic AI plugin\nwith {agentic_type} step for intelligent processing.",
+                font=("Segoe UI", 8, "italic"),
+                fg=self.TEXT_DIM,
+                bg=self.SURFACE,
+                justify=tk.LEFT,
+                anchor="w"
+            )
+            lbl_tooltip.pack(fill=tk.X, pady=(2, 0))
+
         lbl_outputs_title = tk.Label(
             card,
             text="This automation will produce:",
@@ -1171,6 +1205,125 @@ class RPASpecGeneratorApp:
         self.sim_output_text.insert(tk.END, error_append)
         self.sim_output_text.see(tk.END)
         self.sim_output_text.configure(state=tk.DISABLED)
+
+    def _build_tab_log(self) -> None:
+        tab_container = tk.Frame(self.tab_log, bg=self.BG, pady=10)
+        tab_container.pack(fill=tk.BOTH, expand=True)
+
+        header_frame = tk.Frame(tab_container, bg=self.BG)
+        header_frame.pack(fill=tk.X, pady=(0, 10))
+
+        lbl_title = tk.Label(
+            header_frame,
+            text="System Logs (rpa_error_log.txt)",
+            font=self.FONT_LABEL,
+            fg=self.TEXT,
+            bg=self.BG,
+            anchor="w"
+        )
+        lbl_title.pack(side=tk.LEFT)
+
+        btn_refresh = tk.Button(
+            header_frame,
+            text="↻ Refresh Log",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.SURFACE,
+            fg=self.TEXT,
+            activebackground=self.BORDER,
+            activeforeground=self.TEXT,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=4,
+            command=self._refresh_log
+        )
+        btn_refresh.pack(side=tk.RIGHT, padx=(5, 0))
+        btn_refresh.bind("<Enter>", lambda e: btn_refresh.configure(bg=self.BORDER))
+        btn_refresh.bind("<Leave>", lambda e: btn_refresh.configure(bg=self.SURFACE))
+
+        btn_clear = tk.Button(
+            header_frame,
+            text="🗑 Clear Log",
+            font=("Segoe UI", 9, "bold"),
+            bg="#dc2626",
+            fg="#ffffff",
+            activebackground="#b91c1c",
+            activeforeground="#ffffff",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=4,
+            command=self._clear_log
+        )
+        btn_clear.pack(side=tk.RIGHT, padx=(5, 5))
+
+        log_frame = tk.Frame(tab_container, bg=self.BORDER, bd=1, relief=tk.SOLID)
+        log_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.log_text = scrolledtext.ScrolledText(
+            log_frame,
+            wrap=tk.WORD,
+            bg=self.INPUT_BG,
+            fg=self.TEXT,
+            font=self.FONT_MONO,
+            insertbackground=self.ACCENT,
+            selectbackground=self.ACCENT,
+            selectforeground="#ffffff",
+            relief=tk.FLAT,
+            padx=10,
+            pady=8,
+        )
+        self.log_text.pack(fill=tk.BOTH, expand=True)
+        self.log_text.configure(state=tk.DISABLED)
+
+        self.log_text.tag_config("ERROR", foreground="#ef4444")
+        self.log_text.tag_config("WARNING", foreground="#f97316")
+        self.log_text.tag_config("SUCCESS", foreground="#22c55e")
+
+        self._refresh_log()
+        self._auto_refresh_log()
+
+    def _refresh_log(self) -> None:
+        try:
+            import error_logger
+            contents = error_logger.get_log_contents()
+
+            self.log_text.configure(state=tk.NORMAL)
+            self.log_text.delete("1.0", tk.END)
+            
+            for line in contents.splitlines():
+                if self.log_text.index("end-1c") != "1.0":
+                    self.log_text.insert(tk.END, "\n")
+                
+                line_lower = line.lower()
+                if "[error]" in line_lower:
+                    self.log_text.insert(tk.END, line, "ERROR")
+                elif "[warning]" in line_lower:
+                    self.log_text.insert(tk.END, line, "WARNING")
+                elif "success:" in line_lower:
+                    self.log_text.insert(tk.END, line, "SUCCESS")
+                else:
+                    self.log_text.insert(tk.END, line)
+                    
+            self.log_text.see(tk.END)
+            self.log_text.configure(state=tk.DISABLED)
+        except Exception:
+            pass
+
+    def _clear_log(self) -> None:
+        try:
+            import error_logger
+            error_logger.clear_log()
+            self._refresh_log()
+        except Exception:
+            pass
+
+    def _auto_refresh_log(self) -> None:
+        try:
+            self._refresh_log()
+        except Exception:
+            pass
+        self.root.after(5000, self._auto_refresh_log)
 
 
 def launch_gui(on_start=None) -> None:

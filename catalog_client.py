@@ -6,7 +6,7 @@ from google import genai
 # Load environment variables from .env file
 load_dotenv()
 
-# Configure the Gemini API with the key from .env
+# Initialize the Gemini API client once per file
 api_key = os.getenv("GEMINI_API_KEY")
 client = None
 if api_key:
@@ -43,7 +43,7 @@ def detect_automation(user_prompt: str) -> str:
     Returns the matched automation ID, or None if no match is found.
     """
     try:
-        if not api_key:
+        if not api_key or not client:
             print("Warning: GEMINI_API_KEY is not set.")
             return None
 
@@ -94,7 +94,7 @@ def detect_multiple_automations(user_prompt: str) -> list:
     Returns a list of full matched workflow objects (empty list if NONE or parsing fails).
     """
     try:
-        if not api_key:
+        if not api_key or not client:
             print("Warning: GEMINI_API_KEY is not set.")
             return []
 
@@ -160,6 +160,7 @@ def simulate_execution(automation_id: str, input_values: dict) -> str:
 
     name = automation.get("name", "Unknown Workflow")
     expected_outputs = automation.get("expected_outputs", [])
+    agentic_type = automation.get("agentic_type")
 
     # Format inputs for log display
     inputs_lines = []
@@ -186,6 +187,36 @@ def simulate_execution(automation_id: str, input_values: dict) -> str:
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # Construct steps executed
+    steps = [
+        "Validating inputs and establishing connection to AutomationEdge",
+        f"Initializing workflow: {name}",
+        "Processing inputs through workflow engine"
+    ]
+    if agentic_type:
+        steps.extend([
+            f"  → Agentic AI plugin initialized ({agentic_type} step)",
+            "  → LLM provider connected and authenticated",
+            "  → AI processing input data...",
+            "  → Generating context-aware response",
+            "  → AI step completed — output captured"
+        ])
+    steps.extend([
+        "Executing configured actions on target systems",
+        "Capturing output and generating execution log",
+        "Workflow completed — awaiting confirmation"
+    ])
+    
+    steps_formatted = []
+    current_index = 1
+    for step in steps:
+        if step.strip().startswith("→"):
+            steps_formatted.append(step)
+        else:
+            steps_formatted.append(f"  {current_index}. {step}")
+            current_index += 1
+    steps_str = "\n".join(steps_formatted)
+
     # Generate log layout adhering strictly to specification rules
     result = (
         f"✓ Automation: {name}\n"
@@ -193,12 +224,7 @@ def simulate_execution(automation_id: str, input_values: dict) -> str:
         f"Inputs Received:\n"
         f"{inputs_received_str}\n\n"
         f"Steps Executed:\n"
-        f"  1. Validating inputs and establishing connection to AutomationEdge\n"
-        f"  2. Initializing workflow: {name}\n"
-        f"  3. Processing inputs through workflow engine\n"
-        f"  4. Executing configured actions on target systems\n"
-        f"  5. Capturing output and generating execution log\n"
-        f"  6. Workflow completed — awaiting confirmation\n\n"
+        f"{steps_str}\n\n"
         f"Expected Outputs:\n"
         f"{outputs_str}\n\n"
         f"─────────────────────────\n"

@@ -8,6 +8,7 @@ from ae_client import (
     fetch_workflows,
     get_latest_update_timestamp
 )
+from error_logger import log_info, log_success, log_warning, log_error
 
 def load_cache() -> dict:
     """
@@ -68,7 +69,9 @@ def sync_mappings(force=False) -> list:
     Attempts to sync workflows from AutomationEdge REST API.
     Falls back to cached workflows on configuration issues or network failure.
     """
+    log_info("Synchronization of workflows started")
     if not AE_BASE_URL:
+        log_warning("AutomationEdge not configured (AE_BASE_URL is empty), falling back to local cache")
         print("AutomationEdge not configured, loading from cache")
         return load_cache()["mappings"]
 
@@ -80,12 +83,15 @@ def sync_mappings(force=False) -> list:
         if force or is_cache_stale() or has_server_updated(token):
             mappings = fetch_workflows(token)
             save_cache(mappings, server_ts)
+            log_success(f"Successfully synced {len(mappings)} workflows from AutomationEdge")
             print(f"Synced {len(mappings)} workflows from AutomationEdge")
             return mappings
         else:
+            log_success("Using cached mappings (up to date)")
             print("Using cached mappings (up to date)")
             return load_cache()["mappings"]
     except Exception as error:
+        log_error("AutomationEdge sync failed, falling back to local cache", error)
         print(f"AutomationEdge sync failed: {error} — using cached mappings")
         return load_cache()["mappings"]
 
@@ -102,6 +108,7 @@ def start_background_sync(callback=None):
                 if callback and mappings:
                     callback(mappings)
             except Exception as e:
+                log_error("Background sync error occurred", e)
                 print(f"Background sync error: {e}")
 
     thread = threading.Thread(target=worker, daemon=True)
