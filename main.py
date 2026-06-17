@@ -11,7 +11,7 @@ from gui import launch_gui
 if __name__ == "__main__":
     # Startup sequence
     print("Starting RPA Spec Generator...")
-    print("Syncing workflows from AutomationEdge...")
+    print("Authenticating with AutomationEdge via OAuth2...")
     
     # Run initial sync
     mappings = sync_mappings()
