@@ -1,8 +1,13 @@
 import tkinter as tk
 from tkinter import scrolledtext, filedialog, messagebox, ttk
 from threading import Thread
+from datetime import datetime
 from gemini_client import generate_spec
-from catalog_client import detect_automation, simulate_execution, find_automation_by_id
+from catalog_client import (
+    detect_multiple_automations,
+    simulate_execution,
+    find_automation_by_id
+)
 
 
 class RPASpecGeneratorApp:
@@ -26,8 +31,10 @@ class RPASpecGeneratorApp:
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
+        self.check_status_btn = None
         self._configure_window()
         self._build_ui()
+        self._update_status_bar()
 
     # ------------------------------------------------------------------ #
     #  Window setup                                                       #
@@ -108,7 +115,7 @@ class RPASpecGeneratorApp:
             pass
 
     # ------------------------------------------------------------------ #
-    #  TAB 1: Spec Generator (Existing Functionality)                   #
+    #  TAB 1: Spec Generator                                             #
     # ------------------------------------------------------------------ #
     def _build_tab_spec(self) -> None:
         tab_container = tk.Frame(self.tab_spec, bg=self.BG, pady=10)
@@ -248,11 +255,52 @@ class RPASpecGeneratorApp:
         self.save_btn.bind("<Leave>", lambda e: self.save_btn.configure(bg=self.SURFACE))
 
     # ------------------------------------------------------------------ #
-    #  TAB 2: Run Automation (New Functionality)                       #
+    #  TAB 2: Run Automation                                             #
     # ------------------------------------------------------------------ #
     def _build_tab_run(self) -> None:
         tab_container = tk.Frame(self.tab_run, bg=self.BG, pady=10)
         tab_container.pack(fill=tk.BOTH, expand=True)
+
+        # ── STATUS BAR ──
+        status_bar = tk.Frame(tab_container, bg=self.SURFACE, bd=1, relief=tk.SOLID, padx=12, pady=6)
+        status_bar.pack(fill=tk.X, pady=(0, 10))
+
+        self.status_dot = tk.Label(
+            status_bar,
+            text="●",
+            font=("Segoe UI", 12, "bold"),
+            bg=self.SURFACE,
+            fg="#f97316",
+        )
+        self.status_dot.pack(side=tk.LEFT, padx=(0, 4))
+
+        self.status_text = tk.Label(
+            status_bar,
+            text="0 workflows loaded from AutomationEdge  •  Last synced: Never",
+            font=("Segoe UI", 9),
+            fg=self.TEXT,
+            bg=self.SURFACE,
+            anchor="w",
+        )
+        self.status_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.refresh_btn = tk.Button(
+            status_bar,
+            text="↻ Refresh",
+            font=("Segoe UI", 9, "bold"),
+            bg=self.ACCENT,
+            fg="#ffffff",
+            activebackground=self.ACCENT_HOVER,
+            activeforeground="#ffffff",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=10,
+            pady=2,
+            command=self._on_refresh,
+        )
+        self.refresh_btn.pack(side=tk.RIGHT)
+        self.refresh_btn.bind("<Enter>", lambda e: self.refresh_btn.configure(bg=self.ACCENT_HOVER))
+        self.refresh_btn.bind("<Leave>", lambda e: self.refresh_btn.configure(bg=self.ACCENT))
 
         # ── SECTION A: Prompt Input ──
         lbl_run_prompt = tk.Label(
@@ -325,7 +373,6 @@ class RPASpecGeneratorApp:
             messagebox.showwarning("Input Required", "Please describe your automation before generating.")
             return
 
-        # Disable button & show loading state
         self.generate_btn.configure(state=tk.DISABLED, text="⏳  Generating…")
         self.status_var.set("Generating specification — please wait…")
         self._set_output("")
@@ -336,7 +383,6 @@ class RPASpecGeneratorApp:
     def _run_generation(self, user_prompt: str) -> None:
         """Runs in a background thread — calls Gemini and posts result back to UI."""
         result = generate_spec(user_prompt)
-        # Schedule UI update on the main thread
         self.root.after(0, self._on_generation_complete, result)
 
     def _on_generation_complete(self, result: str) -> None:
@@ -387,6 +433,48 @@ class RPASpecGeneratorApp:
     # ------------------------------------------------------------------ #
     #  Tab 2 Logic                                                      #
     # ------------------------------------------------------------------ #
+    def _on_refresh(self) -> None:
+        """Triggers sync_mappings(force=True) in a background thread."""
+        self.refresh_btn.configure(state=tk.DISABLED, text="⏳ Syncing...")
+        
+        def run_sync():
+            try:
+                from sync_manager import sync_mappings
+                import catalog_client
+                mappings = sync_mappings(force=True)
+                catalog_client.initialize(mappings)
+            except Exception as e:
+                print(f"Error during manual refresh: {e}")
+            finally:
+                self.root.after(0, self._update_status_bar)
+                
+        Thread(target=run_sync, daemon=True).start()
+
+    def _update_status_bar(self) -> None:
+        """Loads data from cache and updates the top status bar indicators."""
+        try:
+            from sync_manager import load_cache
+            cache = load_cache()
+            mappings = cache.get("mappings", [])
+            last_synced = cache.get("last_synced")
+            
+            n = len(mappings)
+            if last_synced:
+                try:
+                    timestamp = last_synced[:19].replace("T", " ")
+                except Exception:
+                    timestamp = str(last_synced)
+            else:
+                timestamp = "Never"
+                
+            dot_color = "#22c55e" if n > 0 else "#f97316"
+            self.status_dot.configure(fg=dot_color)
+            self.status_text.configure(text=f"{n} workflows loaded from AutomationEdge  •  Last synced: {timestamp}")
+        except Exception as e:
+            print(f"Error updating status bar: {e}")
+        finally:
+            self.refresh_btn.configure(state=tk.NORMAL, text="↻ Refresh")
+
     def _on_find_automation(self) -> None:
         """Starts background thread to detect catalog automation matching prompt."""
         prompt = self.run_prompt_entry.get().strip()
@@ -397,6 +485,9 @@ class RPASpecGeneratorApp:
         self.find_btn.configure(state=tk.DISABLED, text="⏳  Searching…")
         self.run_status_var.set("Searching automation catalog...")
 
+        # Clear active Check Status button reference if any
+        self.check_status_btn = None
+
         # Reset container
         for widget in self.run_container.winfo_children():
             widget.destroy()
@@ -405,29 +496,33 @@ class RPASpecGeneratorApp:
         thread.start()
 
     def _run_detection(self, prompt: str) -> None:
-        """Detect matched automation ID in a background thread."""
-        detected_id = detect_automation(prompt)
-        self.root.after(0, self._on_detection_complete, detected_id, prompt)
+        """Detect matched automation IDs in a background thread."""
+        results = detect_multiple_automations(prompt)
+        self.root.after(0, self._on_detection_complete, results, prompt)
 
-    def _on_detection_complete(self, detected_id: str, prompt: str) -> None:
+    def _on_detection_complete(self, results: list, prompt: str) -> None:
         """Callback to main thread once automation search returns."""
         self.find_btn.configure(state=tk.NORMAL, text="🔍  Find Automation →")
 
-        if not detected_id:
+        n = len(results)
+        if n == 0:
             self.run_status_var.set("No matching automation found.")
             self._build_no_match_ui(prompt)
+        elif n == 1:
+            self.run_status_var.set(f"✔ Matched catalog entry: {results[0]['id']}")
+            self._build_matched_ui(results[0])
         else:
-            self.run_status_var.set(f"✔ Matched catalog entry: {detected_id}")
-            self._build_matched_ui(detected_id)
+            self.run_status_var.set(f"✔ Found {n} relevant automations.")
+            self._build_multi_match_ui(results)
 
     def _build_no_match_ui(self, prompt: str) -> None:
-        """Create visual feedback panel when no match is found."""
+        """Create visual feedback panel when no match is found (Section E)."""
         frame = tk.Frame(self.run_container, bg=self.BG, pady=20)
         frame.pack(fill=tk.BOTH, expand=True)
 
         lbl = tk.Label(
             frame,
-            text="❌  No matching automation found.\n\nTry rephrasing or use the Spec Generator tab to create a new workflow spec.",
+            text="❌  No matching automation found for your request.\n\nTry rephrasing, or:",
             font=self.FONT_MAIN,
             fg=self.TEXT_DIM,
             bg=self.BG,
@@ -437,7 +532,7 @@ class RPASpecGeneratorApp:
 
         btn = tk.Button(
             frame,
-            text="✦  Generate Spec Instead →",
+            text="Generate Spec Instead →",
             font=self.FONT_BTN,
             bg=self.ACCENT,
             fg="#ffffff",
@@ -459,14 +554,83 @@ class RPASpecGeneratorApp:
         self.input_text.delete("1.0", tk.END)
         self.input_text.insert(tk.END, prompt)
 
-    def _build_matched_ui(self, detected_id: str) -> None:
-        """Renders Details, Dynamic Inputs Form, and Simulation Output layout."""
-        automation = find_automation_by_id(detected_id)
-        if not automation:
-            return
+    def _build_multi_match_ui(self, results: list) -> None:
+        """Renders Section B dropdown selection when multiple matches are found."""
+        dropdown_frame = tk.Frame(self.run_container, bg=self.BG, pady=10)
+        dropdown_frame.pack(fill=tk.X)
+        
+        lbl = tk.Label(
+            dropdown_frame,
+            text=f"We found {len(results)} relevant automations. Select one:",
+            font=self.FONT_MAIN,
+            fg=self.TEXT,
+            bg=self.BG,
+            anchor="w",
+        )
+        lbl.pack(side=tk.LEFT, padx=(0, 10))
+        
+        names = [r["name"] for r in results]
+        var = tk.StringVar(value=names[0])
+        
+        opt_frame = tk.Frame(dropdown_frame, bg=self.BORDER, bd=1, relief=tk.SOLID)
+        opt_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        opt_menu = tk.OptionMenu(
+            opt_frame,
+            var,
+            *names,
+            command=lambda selected_name: self._on_dropdown_selection_changed(selected_name, results)
+        )
+        opt_menu.config(
+            bg=self.INPUT_BG,
+            fg=self.TEXT,
+            activebackground=self.SURFACE,
+            activeforeground=self.TEXT,
+            relief=tk.FLAT,
+            highlightthickness=0,
+            font=self.FONT_MAIN,
+        )
+        opt_menu["menu"].config(
+            bg=self.INPUT_BG,
+            fg=self.TEXT,
+            activebackground=self.ACCENT,
+            activeforeground="#ffffff",
+            font=self.FONT_MAIN,
+        )
+        opt_menu.pack(fill=tk.X, ipady=4)
+        
+        # Section C container
+        self.form_container = tk.Frame(self.run_container, bg=self.BG)
+        self.form_container.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+        
+        # Initially build form for first option
+        self._build_matched_form_ui(results[0])
 
-        # Main horizontal splits
-        main_split = tk.Frame(self.run_container, bg=self.BG)
+    def _on_dropdown_selection_changed(self, selected_name: str, results: list) -> None:
+        """Callback to rebuild Section C dynamically when selection updates."""
+        for widget in self.form_container.winfo_children():
+            widget.destroy()
+
+        self.check_status_btn = None
+            
+        selected_wf = None
+        for r in results:
+            if r["name"] == selected_name:
+                selected_wf = r
+                break
+                
+        if selected_wf:
+            self._build_matched_form_ui(selected_wf)
+
+    def _build_matched_ui(self, workflow: dict) -> None:
+        """Entry point for rendering a single match workflow layout directly."""
+        self.form_container = tk.Frame(self.run_container, bg=self.BG)
+        self.form_container.pack(fill=tk.BOTH, expand=True)
+        self._build_matched_form_ui(workflow)
+
+    def _build_matched_form_ui(self, workflow: dict) -> None:
+        """Renders Section C dynamic inputs and Section D simulation outputs."""
+        main_split = tk.Frame(self.form_container, bg=self.BG)
         main_split.pack(fill=tk.BOTH, expand=True)
 
         # Left Column Scrollable Container
@@ -477,7 +641,6 @@ class RPASpecGeneratorApp:
         scrollbar = tk.Scrollbar(left_outer, orient="vertical", command=canvas.yview)
         left_col = tk.Frame(canvas, bg=self.BG)
 
-        # Bind configuration for scroll region
         left_col.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
@@ -486,12 +649,10 @@ class RPASpecGeneratorApp:
         canvas_window = canvas.create_window((0, 0), window=left_col, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Force left_col frame to match canvas width on resize
         def _configure_canvas(event):
             canvas.itemconfig(canvas_window, width=event.width)
         canvas.bind("<Configure>", _configure_canvas)
 
-        # Mousewheel scroll support
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
@@ -505,13 +666,13 @@ class RPASpecGeneratorApp:
         right_col = tk.Frame(main_split, bg=self.BG)
         right_col.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(15, 0))
 
-        # Left Column: SECTION B - Automation Found Card
+        # Left Column Card Content (Section C)
         card = tk.Frame(left_col, bg=self.SURFACE, bd=1, relief=tk.SOLID, padx=15, pady=12)
         card.pack(fill=tk.X, pady=(0, 10))
 
         lbl_name = tk.Label(
             card,
-            text=automation.get("name"),
+            text=workflow.get("name"),
             font=("Segoe UI", 13, "bold"),
             fg=self.TEXT,
             bg=self.SURFACE,
@@ -521,8 +682,8 @@ class RPASpecGeneratorApp:
 
         lbl_desc = tk.Label(
             card,
-            text=automation.get("description"),
-            font=("Segoe UI", 10),
+            text=workflow.get("description") or "",
+            font=("Segoe UI", 9),
             fg=self.TEXT_DIM,
             bg=self.SURFACE,
             wraplength=350,
@@ -541,7 +702,7 @@ class RPASpecGeneratorApp:
         )
         lbl_outputs_title.pack(fill=tk.X, pady=(0, 3))
 
-        for out in automation.get("expected_outputs", []):
+        for out in workflow.get("expected_outputs", []):
             lbl_out = tk.Label(
                 card,
                 text=f"  • {out}",
@@ -554,41 +715,48 @@ class RPASpecGeneratorApp:
             )
             lbl_out.pack(fill=tk.X)
 
-        # Left Column: SECTION C - Dynamic Input Form (Grid Layout)
-        form_frame = tk.Frame(left_col, bg=self.BG)
-        form_frame.pack(fill=tk.X, pady=(0, 10))
+        # Thin divider line
+        divider = tk.Frame(card, height=1, bg=self.BORDER)
+        divider.pack(fill=tk.X, pady=(10, 10))
+
+        # Inputs Form Inside Card
+        form_frame = tk.Frame(card, bg=self.SURFACE)
+        form_frame.pack(fill=tk.X)
 
         lbl_inputs_title = tk.Label(
             form_frame,
             text="Required Inputs:",
             font=self.FONT_LABEL,
             fg=self.TEXT,
-            bg=self.BG,
+            bg=self.SURFACE,
             anchor="w",
         )
         lbl_inputs_title.pack(fill=tk.X, pady=(0, 6))
 
-        grid_frame = tk.Frame(form_frame, bg=self.BG)
+        grid_frame = tk.Frame(form_frame, bg=self.SURFACE)
         grid_frame.pack(fill=tk.X, pady=(0, 10))
         grid_frame.columnconfigure(0, weight=1, uniform="group1")
         grid_frame.columnconfigure(1, weight=1, uniform="group1")
 
         self.run_inputs = {}
 
-        for idx, inp in enumerate(automation.get("required_inputs", [])):
+        for idx, inp in enumerate(workflow.get("required_inputs", [])):
             field_name = inp["field"]
             field_label = inp["label"]
             field_type = inp["type"]
             placeholder = inp.get("placeholder", "")
 
+            # Mark optional fields with "(optional)" in label
+            if inp.get("optional", False):
+                field_label = f"{field_label} (optional)"
+
             row = idx // 2
             col = idx % 2
 
-            field_container = tk.Frame(grid_frame, bg=self.BG, pady=4, padx=5)
+            field_container = tk.Frame(grid_frame, bg=self.SURFACE, pady=4, padx=5)
             
-            # Span 2 columns if last item and total count is odd
-            is_last = (idx == len(automation.get("required_inputs", [])) - 1)
-            is_odd = (len(automation.get("required_inputs", [])) % 2 == 1)
+            is_last = (idx == len(workflow.get("required_inputs", [])) - 1)
+            is_odd = (len(workflow.get("required_inputs", [])) % 2 == 1)
             if is_last and is_odd:
                 field_container.grid(row=row, column=0, columnspan=2, sticky="ew")
             else:
@@ -599,7 +767,7 @@ class RPASpecGeneratorApp:
                 text=field_label,
                 font=("Segoe UI", 9, "bold"),
                 fg=self.TEXT_DIM,
-                bg=self.BG,
+                bg=self.SURFACE,
                 anchor="w",
             )
             lbl_f.pack(fill=tk.X, pady=(0, 2))
@@ -634,39 +802,56 @@ class RPASpecGeneratorApp:
                 entry_frame = tk.Frame(field_container, bg=self.BORDER, bd=1, relief=tk.SOLID)
                 entry_frame.pack(fill=tk.X)
 
+                entry_kwargs = {
+                    "font": self.FONT_MAIN,
+                    "bg": self.INPUT_BG,
+                    "fg": self.TEXT_DIM,
+                    "insertbackground": self.ACCENT,
+                    "selectbackground": self.ACCENT,
+                    "selectforeground": "#ffffff",
+                    "relief": tk.FLAT,
+                }
+                if field_type == "password":
+                    entry_kwargs["show"] = "*"
+
                 entry = tk.Entry(
                     entry_frame,
-                    font=self.FONT_MAIN,
-                    bg=self.INPUT_BG,
-                    fg=self.TEXT_DIM,
-                    insertbackground=self.ACCENT,
-                    selectbackground=self.ACCENT,
-                    selectforeground="#ffffff",
-                    relief=tk.FLAT,
+                    **entry_kwargs
                 )
                 entry.insert(0, placeholder)
 
                 self.run_inputs[field_name] = (entry, placeholder)
 
-                def make_placeholder_handlers(e, p):
+                def make_placeholder_handlers(e, p, is_pwd):
                     def on_focus_in(event):
                         if e.get() == p:
                             e.delete(0, tk.END)
                             e.configure(fg=self.TEXT)
+                            if is_pwd:
+                                e.configure(show="*")
                     def on_focus_out(event):
                         if not e.get():
                             e.insert(0, p)
                             e.configure(fg=self.TEXT_DIM)
+                            if is_pwd:
+                                e.configure(show="")
+                    
+                    if is_pwd:
+                        if e.get() == p and p != "":
+                            e.configure(show="")
+                        else:
+                            e.configure(show="*")
+                            
                     e.bind("<FocusIn>", on_focus_in)
                     e.bind("<FocusOut>", on_focus_out)
 
-                make_placeholder_handlers(entry, placeholder)
+                make_placeholder_handlers(entry, placeholder, (field_type == "password"))
                 entry.pack(fill=tk.X, ipady=4, padx=6)
 
-        # Run button aligned below the grid fields
+        # ▶ Run Automation button at the bottom of left column card
         submit_btn = tk.Button(
             form_frame,
-            text="⚙  Run Automation",
+            text="▶ Run Automation",
             font=self.FONT_BTN,
             bg=self.ACCENT,
             fg="#ffffff",
@@ -676,13 +861,13 @@ class RPASpecGeneratorApp:
             cursor="hand2",
             padx=20,
             pady=8,
-            command=lambda: self._on_run_simulation(detected_id),
+            command=lambda: self._on_run_simulation(workflow),
         )
         submit_btn.pack(anchor="w", pady=(10, 0))
         submit_btn.bind("<Enter>", lambda e: submit_btn.configure(bg=self.ACCENT_HOVER))
         submit_btn.bind("<Leave>", lambda e: submit_btn.configure(bg=self.ACCENT))
 
-        # Right Column: SECTION D - Simulation Output Panel
+        # Right Column (Section D Output Panel container)
         self.right_col_container = right_col
         self._build_simulation_placeholder()
 
@@ -701,8 +886,8 @@ class RPASpecGeneratorApp:
         )
         placeholder_lbl.pack(expand=True)
 
-    def _on_run_simulation(self, automation_id: str) -> None:
-        """Extract inputs and launch simulated run thread."""
+    def _get_current_input_values(self) -> dict:
+        """Gathers entered data from GUI dynamic form entries."""
         input_values = {}
         for field, item in self.run_inputs.items():
             if isinstance(item, tk.StringVar):
@@ -714,26 +899,33 @@ class RPASpecGeneratorApp:
                     input_values[field] = ""
                 else:
                     input_values[field] = val
+        return input_values
+
+    def _on_run_simulation(self, workflow: dict) -> None:
+        """Extract inputs and launch simulated run thread."""
+        input_values = self._get_current_input_values()
 
         self.run_status_var.set("Simulating execution logs...")
         thread = Thread(
             target=self._run_simulation_thread,
-            args=(automation_id, input_values),
+            args=(workflow, input_values),
             daemon=True,
         )
         thread.start()
 
-    def _run_simulation_thread(self, automation_id: str, input_values: dict) -> None:
+    def _run_simulation_thread(self, workflow: dict, input_values: dict) -> None:
         """Call sim executor in a background thread."""
-        log_output = simulate_execution(automation_id, input_values)
-        self.root.after(0, self._on_simulation_complete, log_output)
+        log_output = simulate_execution(workflow["id"], input_values)
+        self.root.after(0, self._on_simulation_complete, log_output, workflow)
 
-    def _on_simulation_complete(self, log_output: str) -> None:
-        """Updates the right column UI with the simulated results logs."""
+    def _on_simulation_complete(self, log_output: str, workflow: dict) -> None:
+        """Updates the right column UI with the simulated results logs and buttons (Section D)."""
         self.run_status_var.set("✔  Simulation completed successfully.")
         
         for w in self.right_col_container.winfo_children():
             w.destroy()
+
+        self.check_status_btn = None
 
         lbl_sim_title = tk.Label(
             self.right_col_container,
@@ -765,9 +957,12 @@ class RPASpecGeneratorApp:
         self.sim_output_text.insert(tk.END, log_output)
         self.sim_output_text.configure(state=tk.DISABLED)
 
-        # Copy Simulation logs Button
+        # Action Buttons row
+        action_row = tk.Frame(self.right_col_container, bg=self.BG)
+        action_row.pack(fill=tk.X)
+
         copy_sim_btn = tk.Button(
-            self.right_col_container,
+            action_row,
             text="📋  Copy Simulation Log",
             font=self.FONT_BTN,
             bg=self.SURFACE,
@@ -780,9 +975,28 @@ class RPASpecGeneratorApp:
             pady=6,
             command=self._copy_sim_to_clipboard,
         )
-        copy_sim_btn.pack(anchor="w")
+        copy_sim_btn.pack(side=tk.LEFT, padx=(0, 10))
         copy_sim_btn.bind("<Enter>", lambda e: copy_sim_btn.configure(bg=self.BORDER))
         copy_sim_btn.bind("<Leave>", lambda e: copy_sim_btn.configure(bg=self.SURFACE))
+
+        # ▶ Execute on AutomationEdge Button
+        execute_btn = tk.Button(
+            action_row,
+            text="▶ Execute on AutomationEdge",
+            font=self.FONT_BTN,
+            bg=self.ACCENT,
+            fg="#ffffff",
+            activebackground=self.ACCENT_HOVER,
+            activeforeground="#ffffff",
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=14,
+            pady=6,
+            command=lambda: self._on_execute_workflow(workflow),
+        )
+        execute_btn.pack(side=tk.LEFT)
+        execute_btn.bind("<Enter>", lambda e: execute_btn.configure(bg=self.ACCENT_HOVER))
+        execute_btn.bind("<Leave>", lambda e: execute_btn.configure(bg=self.ACCENT))
 
     def _copy_sim_to_clipboard(self) -> None:
         """Copies the simulated log text onto system clipboard."""
@@ -794,9 +1008,175 @@ class RPASpecGeneratorApp:
         self.root.clipboard_append(content)
         self.run_status_var.set("✔  Copied simulation log to clipboard.")
 
+    def _on_execute_workflow(self, workflow: dict) -> None:
+        """Trigger workflow execution request in AutomationEdge backend."""
+        # Step 1 — Check credentials
+        from ae_config import AE_BASE_URL
+        if not AE_BASE_URL or "your-ae-server" in AE_BASE_URL:
+            messagebox.showwarning(
+                "AutomationEdge Not Connected",
+                "Real execution requires AutomationEdge credentials.\n\n"
+                "Add AE_BASE_URL, AE_ORG_CODE, AE_USERNAME, AE_PASSWORD to your .env file.\n\n"
+                "Currently showing simulated output only."
+            )
+            return
 
-def launch_gui() -> None:
+        # Fetch current form inputs
+        input_values = self._get_current_input_values()
+
+        # Step 2 — Run in background thread
+        self.sim_output_text.configure(state=tk.NORMAL)
+        self.sim_output_text.delete("1.0", tk.END)
+        self.sim_output_text.insert(tk.END, "Connecting to AutomationEdge...")
+        self.sim_output_text.configure(state=tk.DISABLED)
+
+        # Clear status buttons if present
+        if self.check_status_btn:
+            try:
+                self.check_status_btn.destroy()
+            except Exception:
+                pass
+            self.check_status_btn = None
+
+        def run_execute():
+            try:
+                from ae_client import get_session_token, execute_workflow
+                token = get_session_token()
+                response = execute_workflow(token, workflow, input_values)
+                self.root.after(0, self._on_execute_complete, response, workflow)
+            except Exception as e:
+                self.root.after(0, self._on_execute_failed, str(e))
+
+        Thread(target=run_execute, daemon=True).start()
+
+    def _on_execute_complete(self, response: dict, workflow: dict) -> None:
+        """Renders success details or raises error dialog on failure."""
+        if not response.get("success", True):
+            self._on_execute_failed(response.get("error", "Execution failed"))
+            return
+
+        req_id = response.get("id") or response.get("requestId") or "N/A"
+        status = response.get("status") or response.get("state") or "QUEUED"
+        name = workflow.get("name")
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        success_text = (
+            f"✓ Workflow Submitted to AutomationEdge\n"
+            f"─────────────────────────────────────\n"
+            f"Workflow:    {name}\n"
+            f"Request ID:  {req_id}\n"
+            f"Status:      {status}\n"
+            f"Submitted:   {now_str}\n"
+            f"Source:      RPA Spec Generator\n\n"
+            f"Your workflow is now queued in AutomationEdge.\n"
+            f"An agent will pick it up and execute it shortly.\n"
+            f"─────────────────────────────────────"
+        )
+
+        self.sim_output_text.configure(state=tk.NORMAL)
+        self.sim_output_text.delete("1.0", tk.END)
+        self.sim_output_text.insert(tk.END, success_text)
+        self.sim_output_text.configure(state=tk.DISABLED)
+
+        # Step 3 — Add Check Status button below the output
+        self._add_check_status_button(req_id)
+
+    def _on_execute_failed(self, error_msg: str) -> None:
+        """Renders error description to simulation output panel on submit fail."""
+        fail_text = (
+            f"✗ Execution Failed\n"
+            f"─────────────────────────────────────\n"
+            f"Error: {error_msg}\n\n"
+            f"Possible reasons:\n"
+            f"• Invalid credentials in .env\n"
+            f"• Workflow not assigned to any agent\n"
+            f"• AutomationEdge server unreachable\n"
+            f"• Workflow name mismatch\n"
+            f"─────────────────────────────────────"
+        )
+
+        self.sim_output_text.configure(state=tk.NORMAL)
+        self.sim_output_text.delete("1.0", tk.END)
+        self.sim_output_text.insert(tk.END, fail_text)
+        self.sim_output_text.configure(state=tk.DISABLED)
+
+    def _add_check_status_button(self, request_id) -> None:
+        """Creates a Check Status button in output card space."""
+        if self.check_status_btn:
+            try:
+                self.check_status_btn.destroy()
+            except Exception:
+                pass
+
+        self.check_status_btn = tk.Button(
+            self.right_col_container,
+            text="🔍 Check Status",
+            font=self.FONT_BTN,
+            bg=self.SURFACE,
+            fg=self.TEXT,
+            activebackground=self.BORDER,
+            activeforeground=self.TEXT,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=14,
+            pady=6,
+            command=lambda: self._on_check_status(request_id),
+        )
+        self.check_status_btn.pack(anchor="w", pady=(10, 0))
+        self.check_status_btn.bind("<Enter>", lambda e: self.check_status_btn.configure(bg=self.BORDER))
+        self.check_status_btn.bind("<Leave>", lambda e: self.check_status_btn.configure(bg=self.SURFACE))
+
+    def _on_check_status(self, request_id) -> None:
+        """Queries status of execution request in background thread."""
+        self.check_status_btn.configure(state=tk.DISABLED, text="⏳ Checking...")
+
+        def run_check():
+            try:
+                from ae_client import get_session_token, get_execution_status
+                token = get_session_token()
+                status_res = get_execution_status(token, str(request_id))
+                self.root.after(0, self._on_check_status_complete, status_res)
+            except Exception as e:
+                self.root.after(0, self._on_check_status_failed, str(e))
+
+        Thread(target=run_check, daemon=True).start()
+
+    def _on_check_status_complete(self, response: dict) -> None:
+        """Appends status response payload metadata to log text."""
+        self.check_status_btn.configure(state=tk.NORMAL, text="🔍 Check Status")
+
+        status = response.get("status") or response.get("state") or "UNKNOWN"
+        updated_at = response.get("updatedDate") or response.get("lastUpdatedDate") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(updated_at, int):
+            updated_at = datetime.fromtimestamp(updated_at / 1000.0).strftime("%Y-%m-%d %H:%M:%S")
+
+        status_append = (
+            f"\n\n[STATUS UPDATE]\n"
+            f"Status:       {status}\n"
+            f"Updated At:   {updated_at}\n"
+            f"Response Msg: {response.get('message') or 'No message'}"
+        )
+
+        self.sim_output_text.configure(state=tk.NORMAL)
+        self.sim_output_text.insert(tk.END, status_append)
+        self.sim_output_text.see(tk.END)
+        self.sim_output_text.configure(state=tk.DISABLED)
+
+    def _on_check_status_failed(self, error_msg: str) -> None:
+        """Appends status request failure warnings to log text."""
+        self.check_status_btn.configure(state=tk.NORMAL, text="🔍 Check Status")
+        error_append = f"\n\n[STATUS UPDATE FAILED]\nError: {error_msg}"
+
+        self.sim_output_text.configure(state=tk.NORMAL)
+        self.sim_output_text.insert(tk.END, error_append)
+        self.sim_output_text.see(tk.END)
+        self.sim_output_text.configure(state=tk.DISABLED)
+
+
+def launch_gui(on_start=None) -> None:
     """Create the Tk root and start the application."""
     root = tk.Tk()
     RPASpecGeneratorApp(root)
+    if on_start:
+        root.after(1000, on_start)
     root.mainloop()
