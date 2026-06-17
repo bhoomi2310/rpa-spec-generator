@@ -1,15 +1,16 @@
 import os
 from datetime import datetime
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Configure the Gemini API with the key from .env
 api_key = os.getenv("GEMINI_API_KEY")
+client = None
 if api_key:
-    genai.configure(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
 # Module-level variable to store dynamically loaded mappings
 LIVE_MAPPINGS = []
@@ -72,11 +73,11 @@ def detect_automation(user_prompt: str) -> str:
             f"Reply with ONLY the automation id. If nothing matches, reply NONE."
         )
 
-        model = genai.GenerativeModel(model_name="gemini-2.5-flash")
-
-        # We request strict temperature 0.1 for high confidence matching
-        config = genai.types.GenerationConfig(temperature=0.1)
-        response = model.generate_content(model_prompt, generation_config=config)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=model_prompt,
+            config={"temperature": 0.1}
+        )
         
         detected_id = response.text.strip()
         if not detected_id or detected_id.upper() == "NONE" or detected_id not in valid_ids:
@@ -125,11 +126,11 @@ def detect_multiple_automations(user_prompt: str) -> list:
             f"If nothing matches at all, return NONE."
         )
 
-        model = genai.GenerativeModel(model_name="gemini-2.5-flash")
-
-        # We request strict temperature 0.1 for high confidence matching
-        config = genai.types.GenerationConfig(temperature=0.1)
-        response = model.generate_content(model_prompt, generation_config=config)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=model_prompt,
+            config={"temperature": 0.1}
+        )
         
         response_text = response.text.strip()
         if not response_text or response_text.upper() == "NONE":

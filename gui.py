@@ -1011,12 +1011,12 @@ class RPASpecGeneratorApp:
     def _on_execute_workflow(self, workflow: dict) -> None:
         """Trigger workflow execution request in AutomationEdge backend."""
         # Step 1 — Check credentials
-        from ae_config import AE_BASE_URL
-        if not AE_BASE_URL or "your-ae-server" in AE_BASE_URL:
+        from ae_config import AE_BASE_URL, AE_CLIENT_ID, AE_CLIENT_SECRET
+        if not AE_BASE_URL or "your-ae-server" in AE_BASE_URL or not AE_CLIENT_ID or not AE_CLIENT_SECRET:
             messagebox.showwarning(
                 "AutomationEdge Not Connected",
                 "Real execution requires AutomationEdge credentials.\n\n"
-                "Add AE_BASE_URL, AE_ORG_CODE, AE_USERNAME, AE_PASSWORD to your .env file.\n\n"
+                "Add AE_BASE_URL, AE_ORG_CODE, AE_CLIENT_ID, AE_CLIENT_SECRET to your .env file.\n\n"
                 "Currently showing simulated output only."
             )
             return

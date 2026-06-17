@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import genai
 from system_prompt import SYSTEM_PROMPT
 
 # Load environment variables from .env file
@@ -8,8 +8,9 @@ load_dotenv()
 
 # Configure the Gemini API with the key from .env
 api_key = os.getenv("GEMINI_API_KEY")
+client = None
 if api_key:
-    genai.configure(api_key=api_key)
+    client = genai.Client(api_key=api_key)
 
 
 def generate_spec(user_prompt: str) -> str:
@@ -26,12 +27,11 @@ def generate_spec(user_prompt: str) -> str:
                 "  2. Replace the placeholder with your actual Gemini API key"
             )
 
-        model = genai.GenerativeModel(
-            model_name="gemini-2.5-flash",
-            system_instruction=SYSTEM_PROMPT,
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=user_prompt,
+            config={"system_instruction": SYSTEM_PROMPT, "temperature": 0.3}
         )
-
-        response = model.generate_content(user_prompt)
         return response.text
 
     except Exception as e:
